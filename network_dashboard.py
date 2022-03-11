@@ -1,11 +1,13 @@
 from turtle import title
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import pymongo
 import streamlit as st
 
+matplotlib.use('Agg')
 
 st.set_page_config(page_title='NETWORK UPTIME AND DOWNTIME', layout="wide")
 st.title('Data report on network uptime and outages over time')
