@@ -10,7 +10,7 @@ import streamlit as st
 matplotlib.use('Agg')
 
 st.set_page_config(page_title='NETWORK UPTIME AND DOWNTIME', layout="wide")
-st.title('Data report on network uptime and outages over time')
+st.title('Data report on network uptime and outages over the first quarter, 2022')
 
 # airqo = pymongo.MongoClient(
 #     "mongodb://admin:U%7D%2BBxu4%21%3Eu@34.140.46.94:17773")
@@ -79,6 +79,8 @@ def load_device_data(device):
 
 def load_device_dataframe(json_data):
     device_data = pd.DataFrame(json_data)
+    device_data['created_at'] = pd.to_datetime(
+        device_data['created_at']).dt.date
 
     device_data.set_index('created_at', inplace=True)
 
@@ -95,7 +97,7 @@ def load_device_dataframe(json_data):
     device_name_data = device_uptime_count.join(
         device_downtime_count, how='outer').fillna(0).astype(np.int32)
     #device_name_data = device_name_data.add_suffix('_count')
-    device_name_data.index = pd.DatetimeIndex(device_name_data.index)
+    device_name_data.index = pd.to_datetime(device_name_data.index)
     device_name_data['pct_uptime'] = (
         device_name_data['uptime']/device_name_data.sum(axis=1)*100).round(1)
     device_name_data['pct_downtime'] = 100 - device_name_data['pct_uptime']
@@ -117,11 +119,25 @@ device_name_data_month_wrap = dict(
     zip(device_name_data_month_name, device_name_data_month))
 selected_month = st.sidebar.radio('Month', device_name_data_month_name)
 
+
 # Barchart
 my_color = ['g', 'r']
 fig_bar, axes_bar = plt.subplots(1, 1, figsize=(14, 10))
-device_name_data[(device_name_data.index.year == selected_year) & (
-    device_name_data.index.month == device_name_data_month_wrap[selected_month])][['uptime', 'downtime']].plot(kind='bar', ax=axes_bar, color=my_color)
+device_name_data_subset = device_name_data[(device_name_data.index.year == selected_year) & (
+    device_name_data.index.month == device_name_data_month_wrap[selected_month])][['uptime', 'downtime']]
+
+date_max_value = device_name_data_subset.index.days_in_month.unique().item()
+selected_date = st.sidebar.slider(
+    'day', min_value=1, max_value=date_max_value, value=date_max_value)
+
+device_name_data_subset = device_name_data_subset[(
+    device_name_data_subset.index.day >= 1) & (device_name_data_subset.index.day <= selected_date)]
+device_name_data_subset.index = device_name_data_subset.index.date
+
+# device_name_data_subset = device_name_data_subset[(
+#     device_name_data_subset >= 1) & (device_name_data_subset <= selected_date)]
+# device_name_data_subset.index = device_name_data_subset.index.date
+device_name_data_subset.plot(kind='bar', ax=axes_bar, color=my_color)
 axes_bar.yaxis.set_major_locator(MaxNLocator(integer=True))
 axes_bar.set_title(
     f'{selected_device} device network uptime and downtime daily count for the month of {selected_month}, {selected_year}', fontsize=20)
