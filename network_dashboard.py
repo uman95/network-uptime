@@ -4,6 +4,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import pymongo
+import requests
 import streamlit as st
 
 matplotlib.use('Agg')
@@ -11,24 +12,73 @@ matplotlib.use('Agg')
 st.set_page_config(page_title='NETWORK UPTIME AND DOWNTIME', layout="wide")
 st.title('Data report on network uptime and outages over time')
 
-airqo = pymongo.MongoClient(
-    "mongodb://admin:U%7D%2BBxu4%21%3Eu@34.140.46.94:17773")
-prod_airqo = airqo['prod_airqo']
+# airqo = pymongo.MongoClient(
+#     "mongodb://admin:U%7D%2BBxu4%21%3Eu@34.140.46.94:17773")
+# prod_airqo = airqo['prod_airqo']
 
-device_uptime = prod_airqo['device_uptime']
-network_uptime = prod_airqo['network_uptime']
+# device_uptime = prod_airqo['device_uptime']
+# network_uptime = prod_airqo['network_uptime']
 
-device_name = device_uptime.distinct('device_name')
+# device_name = device_uptime.distinct('device_name')
+# selected_device = st.sidebar.selectbox('Device name', device_name)
+
+
+# @st.cache
+# def load_device_data(device):
+#     device_data = pd.DataFrame(device_uptime.find({'device_name': device},
+#                                                   {'device_name': 1, 'channel_id': 1, 'uptime': 1, 'downtime': 1, 'created_at': 1}))
+#     network_data = pd.DataFrame(network_uptime.find({}))
+
+#     network_data.set_index('created_at', inplace=True)
+
+#     device_data.set_index('created_at', inplace=True)
+
+#     device_uptime_data = device_data.loc[(
+#         device_data.uptime == 100)]
+#     device_downtime_data = device_data.loc[(
+#         device_data.uptime == 0)]
+
+#     device_uptime_count = pd.DataFrame(device_uptime_data.groupby(
+#         device_uptime_data.index.date).count()['uptime'])
+#     device_downtime_count = pd.DataFrame(device_downtime_data.groupby(
+#         device_downtime_data.index.date).count()['downtime'])
+
+#     device_name_data = device_uptime_count.join(
+#         device_downtime_count, how='outer').fillna(0).astype(np.int32)
+#     #device_name_data = device_name_data.add_suffix('_count')
+#     device_name_data.index = pd.DatetimeIndex(device_name_data.index)
+#     device_name_data['pct_uptime'] = (
+#         device_name_data['uptime']/device_name_data.sum(axis=1)*100).round(1)
+#     device_name_data['pct_downtime'] = 100 - device_name_data['pct_uptime']
+
+#     return device_name_data
+
+api_url = 'https://platform.airqo.net/api/v1/devices?tenant=airqo'
+results = requests.get(api_url)
+devices_data = results.json()["devices"]
+
+device_name = devices_name = [data['name'] for data in devices_data]
 selected_device = st.sidebar.selectbox('Device name', device_name)
 
 
 @st.cache
 def load_device_data(device):
-    device_data = pd.DataFrame(device_uptime.find({'device_name': device},
-                                                  {'device_name': 1, 'channel_id': 1, 'uptime': 1, 'downtime': 1, 'created_at': 1}))
-    network_data = pd.DataFrame(network_uptime.find({}))
+    api = 'https://platform.airqo.net/api/v1/monitor/devices/uptime?tenant=airqo&startDate=2022-01-01T00:00:00.001Z&endDate=2022-03-25T19:00:00.001Z&device_name=' + device
+    api_result = requests.get(api)
+    values = api_result.json()['data'][0]['values']
+    subset = ['created_at', 'uptime', 'downtime']
+    data_subset_list = []
+    for element in values:
+        data_subset = {}
+        for k in subset:
+            data_subset[k] = element[k]
+        data_subset_list.append(data_subset)
 
-    network_data.set_index('created_at', inplace=True)
+    return data_subset_list
+
+
+def load_device_dataframe(json_data):
+    device_data = pd.DataFrame(json_data)
 
     device_data.set_index('created_at', inplace=True)
 
@@ -38,9 +88,9 @@ def load_device_data(device):
         device_data.uptime == 0)]
 
     device_uptime_count = pd.DataFrame(device_uptime_data.groupby(
-        device_uptime_data.index.date).count()['uptime'])
+        pd.DatetimeIndex(device_uptime_data.index).date).count()['uptime'])
     device_downtime_count = pd.DataFrame(device_downtime_data.groupby(
-        device_downtime_data.index.date).count()['downtime'])
+        pd.DatetimeIndex(device_downtime_data.index).date).count()['downtime'])
 
     device_name_data = device_uptime_count.join(
         device_downtime_count, how='outer').fillna(0).astype(np.int32)
@@ -53,7 +103,8 @@ def load_device_data(device):
     return device_name_data
 
 
-device_name_data = load_device_data(selected_device)
+json_data = load_device_data(selected_device)
+device_name_data = load_device_dataframe(json_data)
 
 device_name_data_year = device_name_data.index.year.unique()
 selected_year = st.sidebar.selectbox('Year', device_name_data_year)
